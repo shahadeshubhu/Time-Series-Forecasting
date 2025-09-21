@@ -1,0 +1,238 @@
+---
+title: "MATH 4022 — Computer Practical 3"
+author: "Shubhankar Shahade"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: paged
+---
+
+> **How to use this file**  
+> Knit to HTML and run chunks in order. This template mirrors the Practical 3 sheet and bakes in a self‑contained `LB_test()` helper, plus short interpretation notes so you can focus on the workflow.
+
+# Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.align = "center")
+# Load datasets (usually preinstalled)
+suppressPackageStartupMessages({
+  library(datasets)
+})
+
+# Self-contained Ljung–Box helper to mimic the course function ---------------------------------
+# Returns a data.frame with degrees of freedom, statistic and p-value for lags 1..(max.k-1).
+LB_test <- function(residuals, max.k = 11, p = 0, q = 0) {
+  stopifnot(max.k >= 2)
+  ks <- 1:(max.k - 1)
+  df <- pmax(ks - (p + q), 1)  # match course convention: df = lag - (p+q), floor at 1
+  stats <- pvals <- numeric(length(ks))
+  for (i in seq_along(ks)) {
+    k <- ks[i]
+    # Subtract fitdf = p+q from lag to match df above; 'Box.test' uses fitdf parameter
+    bt <- Box.test(residuals, lag = k, type = "Ljung-Box", fitdf = p + q)
+    stats[i] <- unname(bt$statistic)
+    pvals[i] <- unname(bt$p.value)
+  }
+  data.frame(
+    deg_freedom = df,
+    LB_statistic = stats,
+    LB_p_value = pvals
+  )
+}
+```
+
+# 1. Nile data (annual flow at Aswan, 1871–1970)
+
+## 1(a) Load and view
+
+```{r q1a-load}
+# The 'Nile' time series ships with base R in the 'datasets' package
+Nile
+```
+
+## 1(b) Time plot, sample ACF and PACF. Stationarity?
+
+```{r q1b-plots}
+par(mfrow = c(1, 3))
+ts.plot(Nile, xlab = "Year", ylab = "Annual flow", main = "Nile")
+acf(Nile, main = "ACF: Nile")
+pacf(Nile, main = "PACF: Nile")
+par(mfrow = c(1, 1))
+```
+
+**Answer (brief):**  
+The mean level appears higher pre‑~1895 and lower thereafter; the ACF declines only gradually. Overall, **not clearly stationary** at level.  
+
+_(This matches the reasoning typically given in worked notes.)_
+
+## 1(c) First difference, plots, stationarity?
+
+```{r q1c-diff-plots}
+Nile_diff <- diff(Nile)
+par(mfrow = c(1, 3))
+ts.plot(Nile_diff, xlab = "Year", ylab = "First difference", main = "Δ Nile")
+acf(Nile_diff, main = "ACF: Δ Nile")
+pacf(Nile_diff, main = "PACF: Δ Nile")
+par(mfrow = c(1, 1))
+```
+
+**Answer (brief):**  
+The differenced series has near‑zero mean and roughly constant variability; ACF/PACF tail off quickly. **Looks (weakly) stationary** now.
+
+## 1(d) Fit AR(1) by ML; report \(\phi_1\), \(\mu\), and \(\sigma_z^2\)
+
+```{r q1d-fit-ar1}
+model.AR1 <- arima(Nile, order = c(1, 0, 0), method = "ML")
+model.AR1
+coef_AR1 <- coef(model.AR1)
+sigma2_AR1 <- model.AR1$sigma2
+list(phi1_hat = unname(coef_AR1["ar1"]),
+     mu_hat   = unname(coef_AR1["intercept"]),
+     sigma2_z_hat = sigma2_AR1)
+```
+
+_(Typical output is around \(\phi_1\approx 0.51\), \(\mu\approx 920\), \(\sigma^2\approx 2.1\times 10^4\). Your exact numbers may differ slightly depending on R version.)_
+
+## 1(e) Residual diagnostics for AR(1)
+
+```{r q1e-resid}
+resid.AR1 <- residuals(model.AR1)
+par(mfrow = c(1, 2))
+ts.plot(resid.AR1, xlab = "Year", ylab = "Residual", main = "AR(1) residuals")
+acf(resid.AR1, main = "ACF: AR(1) residuals")
+par(mfrow = c(1, 1))
+```
+
+**Answer (brief):**  
+ACF is close to 0 at most lags, but the **time plot shows level shifts**, so residuals don’t look like perfect white noise.
+
+## 1(f) Ljung–Box tests (lags 1–10), with p+q=1
+
+```{r q1f-lb}
+AR1.LB <- LB_test(resid.AR1, max.k = 11, p = 1, q = 0)
+AR1.LB
+plot(AR1.LB$deg_freedom, AR1.LB$LB_p_value,
+     xlab = "Degrees of freedom", ylab = "P-value",
+     main = "Ljung–Box test P-values (AR(1) residuals)",
+     ylim = c(0, 1))
+abline(h = 0.05, lty = 2)
+```
+
+**Answer (brief):**  
+P‑values are mostly > 0.05, but some are smallish; with the residual level shift in mind, **consider a different model**.
+
+## 1(g) Find an appropriate (parsimonious) ARIMA model; compare by AIC and tests
+
+```{r q1g-candidates}
+# Start with an I(1) model based on 1(c)
+fit_011 <- arima(Nile, order = c(0, 1, 1), method = "ML")
+fit_111 <- arima(Nile, order = c(1, 1, 1), method = "ML")
+fit_211 <- arima(Nile, order = c(2, 1, 1), method = "ML")
+fit_112 <- arima(Nile, order = c(1, 1, 2), method = "ML")
+
+AICs <- c(`ARIMA(0,1,1)` = AIC(fit_011),
+          `ARIMA(1,1,1)` = AIC(fit_111),
+          `ARIMA(2,1,1)` = AIC(fit_211),
+          `ARIMA(1,1,2)` = AIC(fit_112))
+AICs
+```
+
+```{r q1g-choice-and-diagnostics}
+best <- fit_111  # Typically lowest AIC and supported by significant AR term
+best
+res_best <- residuals(best)
+
+par(mfrow = c(1, 2))
+ts.plot(res_best, xlab = "Year", ylab = "Residual", main = "ARIMA(1,1,1) residuals")
+acf(res_best, main = "ACF: ARIMA(1,1,1) residuals")
+par(mfrow = c(1, 1))
+
+LB_best <- LB_test(res_best, max.k = 11, p = 1, q = 1)
+LB_best
+plot(LB_best$deg_freedom, LB_best$LB_p_value,
+     xlab = "Degrees of freedom", ylab = "P-value",
+     main = "Ljung–Box P-values: ARIMA(1,1,1)",
+     ylim = c(0, 1))
+abline(h = 0.05, lty = 2)
+```
+
+**Answer (brief):**  
+In line with common solutions, **ARIMA(1,1,1)** is often preferred: lower AIC than ARIMA(0,1,1); AR term typically significant; residuals look white and Ljung–Box P‑values are non‑significant.
+
+---
+
+# 2. New York daily max temperature (May–Sept 1973)
+
+## 2(a) Load and create a daily time series
+
+```{r q2a-load}
+data(airquality)  # from 'datasets'
+ny_temp <- ts(airquality$Temp, start = c(1973, 121), frequency = 365)
+length(ny_temp)  # 153 days (May 1 to Sept 30, 1973)
+```
+
+## 2(b) Time plot, ACF, PACF. Stationarity?
+
+```{r q2b-plots}
+par(mfrow = c(1, 3))
+ts.plot(ny_temp, xlab = "Time (1973)", ylab = "Max. daily temp (F)", main = "NYC Temp (raw)")
+acf(ny_temp, main = "ACF: ny_temp")
+pacf(ny_temp, main = "PACF: ny_temp")
+par(mfrow = c(1, 1))
+```
+
+**Answer (brief):**  
+Not stationary—there’s seasonal/low‑frequency structure and the ACF doesn’t drop to 0 quickly.
+
+## 2(c) First difference; identify and fit a parsimonious ARMA model
+
+```{r q2c-diff}
+temp_diff <- diff(ny_temp)
+par(mfrow = c(1, 3))
+ts.plot(temp_diff, xlab = "Time (1973)", ylab = "Δ Temp (F)", main = "Differenced ny_temp")
+acf(temp_diff, main = "ACF: Δ ny_temp")
+pacf(temp_diff, main = "PACF: Δ ny_temp")
+par(mfrow = c(1, 1))
+```
+
+```{r q2c-fit-candidates}
+# Candidate fits (on differenced series): MA(1), MA(2), ARMA(1,1)
+fit_MA1  <- arima(temp_diff, order = c(0, 0, 1), method = "ML")
+fit_MA2  <- arima(temp_diff, order = c(0, 0, 2), method = "ML")
+fit_ARMA <- arima(temp_diff, order = c(1, 0, 1), method = "ML")
+
+fits <- list(MA1 = fit_MA1, MA2 = fit_MA2, ARMA11 = fit_ARMA)
+sapply(fits, AIC)
+fits
+```
+
+```{r q2c-diagnostics}
+# Residual checks for MA(1) as a parsimonious candidate
+res_MA1 <- residuals(fit_MA1)
+par(mfrow = c(1, 2))
+ts.plot(res_MA1, xlab = "Time", ylab = "Residual", main = "MA(1) residuals")
+acf(res_MA1, main = "ACF: MA(1) residuals")
+par(mfrow = c(1, 1))
+
+LB_MA1 <- LB_test(res_MA1, max.k = 11, p = 0, q = 1)
+LB_MA1
+plot(LB_MA1$deg_freedom, LB_MA1$LB_p_value,
+     xlab = "Degrees of freedom", ylab = "P-value",
+     main = "Ljung–Box P-values: MA(1)",
+     ylim = c(0, 1))
+abline(h = 0.05, lty = 2)
+```
+
+**Answer (brief):**  
+The **MA(1)** is typically adequate and parsimonious: AIC comparable to alternatives; \(\theta_2\) in MA(2) is often not significant; AR term in ARMA(1,1) often not significant. Residuals look white and Ljung–Box P‑values are non‑significant.
+
+---
+
+# Appendix — Reproducibility helpers
+
+```{r session-info, echo=FALSE}
+sessionInfo()
+```

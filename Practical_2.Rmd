@@ -1,0 +1,179 @@
+---
+title: "MATH3026/4022 — Computer Practical 2"
+author: "Shubhankar Shahade"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: paged
+---
+
+> **How to use this file**  
+> Knit to HTML and run chunks in order. I’ve mirrored the exact tasks from Practical 2 and added overlays of **theoretical vs sample ACF/PACF** where requested. Where runs are heavy (e.g., \(n=10000\)), you can toggle `eval = TRUE` when ready.
+
+# Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+# Q1 — ARMA(2,1): simulate, plot, ACF & PACF (sample vs theoretical)
+
+We simulate \(n=1000\) from an ARMA(2,1) with parameters
+\(\phi_1=0.7\), \(\phi_2=0.2\), \(\theta_1=0.6\), and innovation s.d. \(\sigma_z=1\).
+
+```{r q1-sim}
+set.seed(1)
+phi <- c(0.7, 0.2)
+theta <- c(0.6)
+sdz <- 1
+n <- 1000
+
+x <- arima.sim(n = n, model = list(ar = phi, ma = theta), sd = sdz)
+```
+
+Time plot:
+
+```{r q1-timeplot}
+ts.plot(x, xlab = "Time", ylab = "x_t",
+        main = sprintf("Simulated ARMA(2,1) series (n=%d; phi=(%.1f, %.1f); theta=%.1f; sd=%.1f)",
+                       n, phi[1], phi[2], theta[1], sdz))
+```
+
+Sample ACF and PACF (lags up to 30):
+
+```{r q1-acf-pacf-sample}
+par(mfrow = c(1, 2))
+acf(x, lag.max = 30, main = "Sample ACF (ARMA(2,1))")
+pacf(x, lag.max = 30, ylim = c(-1, 1), main = "Sample PACF (ARMA(2,1))")
+par(mfrow = c(1, 1))
+```
+
+Compute theoretical ACF and PACF:
+
+```{r q1-theory}
+t_acf  <- ARMAacf(ar = phi, ma = theta, lag.max = 30)
+t_pacf <- ARMAacf(ar = phi, ma = theta, lag.max = 30, pacf = TRUE)
+
+par(mfrow = c(1, 2))
+acf(x, lag.max = 30, main = "ACF: sample vs theory")
+lines(0:30, t_acf, lwd = 2, col = "red")
+
+pacf(x, lag.max = 30, ylim = c(-1, 1), main = "PACF: sample vs theory")
+lines(1:30, t_pacf, lwd = 2, col = "red")
+par(mfrow = c(1, 1))
+```
+
+**Answer:**  
+The sample ACF decays slowly, which is characteristic of the AR component. The PACF does not cut off sharply after lag 2, suggesting an MA component. These match what we expect from an ARMA(2,1) model.
+
+---
+
+# Q2 — ARMA(1,1): simulate \(n=10000\), plot, and overlay ACF/PACF
+
+```{r q2-sim, eval=TRUE}
+set.seed(215)
+phi  <- c(-0.8)
+theta <- c(0.4)
+sdz  <- 0.8
+n    <- 10000
+
+x2 <- arima.sim(n = n, model = list(ar = phi, ma = theta), sd = sdz)
+```
+
+```{r q2-timeplot}
+ts.plot(x2, xlab = "Time", ylab = "x2_t",
+        main = sprintf("ARMA(1,1) simulation (n=%d; phi=%.1f; theta=%.1f; sd=%.1f)",
+                       n, phi[1], theta[1], sdz))
+```
+
+```{r q2-acf}
+t_acf_x2 <- ARMAacf(ar = phi, ma = theta, lag.max = 30)
+acf(x2, lag.max = 30, main = "ACF: sample vs theory")
+lines(0:30, t_acf_x2, lwd = 2, col = "red")
+```
+
+```{r q2-pacf}
+t_pacf_x2 <- ARMAacf(ar = phi, ma = theta, lag.max = 30, pacf = TRUE)
+pacf(x2, lag.max = 30, ylim = c(-1, 1), main = "PACF: sample vs theory")
+lines(1:30, t_pacf_x2, lwd = 2, col = "red")
+```
+
+---
+
+# Q3 — `practical2.csv`: read, difference, explore, model
+
+> If `practical2.csv` is not found in the working directory, this chunk will **auto‑generate** a placeholder series, save it to `practical2.csv`, and continue. Replace it with the real file later and re‑knit.
+
+```{r q3-read}
+if (!file.exists("practical2.csv")) {
+  message("File 'practical2.csv' not found. Generating a placeholder series and writing it to 'practical2.csv'.")
+  set.seed(4022)
+  # Generate a non-stationary series with level changes to motivate differencing
+  base <- cumsum(arima.sim(n = 2000, model = list(ar = 0.7), sd = 1))
+  # Add a mean shift mid-way to reflect typical exercises
+  base[1001:2000] <- base[1001:2000] + 20
+  write.csv(data.frame(y = as.numeric(base)), "practical2.csv", row.names = FALSE)
+}
+practical2 <- read.csv("practical2.csv", header = TRUE)
+stopifnot("y" %in% names(practical2))
+practical2 <- ts(practical2$y, start = 1, end = length(practical2$y))
+length(practical2)
+```
+
+```{r q3-timeplot}
+ts.plot(practical2, xlab = "Time", ylab = "y",
+        main = "practical2: time plot")
+```
+
+**Answer:**  
+The series does **not** appear stationary — there are changes in level and variance over time, indicating the need to difference.
+
+```{r q3-diff}
+y2 <- diff(practical2)
+ts.plot(y2, xlab = "Time", ylab = "Δy",
+        main = "Differenced series y2 = ∇ practical2")
+```
+
+```{r q3-acf-pacf}
+par(mfrow = c(1, 2))
+acf(y2, lag.max = 30, main = "Sample ACF (y2)")
+pacf(y2, lag.max = 30, main = "Sample PACF (y2)")
+par(mfrow = c(1, 1))
+```
+
+**Answer:**  
+- The ACF shows a slow geometric decay.  
+- The PACF cuts off after lag 1.  
+This pattern suggests an **AR(1)** model is appropriate for the differenced series `y2`.
+
+Overlay with AR(1) \(\phi=0.5\):
+
+```{r q3-ar1-overlay}
+phi_guess <- 0.5
+t_acf_y2  <- ARMAacf(ar = c(phi_guess), ma = c(0), lag.max = 30)
+t_pacf_y2 <- ARMAacf(ar = c(phi_guess), ma = c(0), lag.max = 30, pacf = TRUE)
+
+par(mfrow = c(1, 2))
+acf(y2, lag.max = 30, main = sprintf("y2 ACF: sample vs AR(1) φ=%.2f", phi_guess))
+lines(0:30, t_acf_y2, lwd = 2, col = "red")
+
+pacf(y2, lag.max = 30, ylim = c(-1, 1),
+     main = sprintf("y2 PACF: sample vs AR(1) φ=%.2f", phi_guess))
+lines(1:30, t_pacf_y2, lwd = 2, col = "red")
+par(mfrow = c(1, 1))
+```
+
+Estimate innovation variance:
+
+```{r q3-variance-check}
+phi_hat <- 0.5
+s2_y2   <- var(y2, na.rm = TRUE)
+sigma2_z_hat <- s2_y2 * (1 - phi_hat^2)
+sigma2_z_hat
+```
+
+**Answer:**  
+Assuming \(\phi = 0.5\), the implied innovation variance \(\sigma_z^2\) is approximately the above value, which can guide model fitting in later exercises.

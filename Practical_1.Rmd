@@ -1,0 +1,139 @@
+---
+title: "MATH4022_Practical1"
+author: "Shubhu Shahade"
+date: "2025-09-21"
+output: html_document
+---
+
+```{r}
+set.seed(7436)        # You may change the seed if you wish
+phi1    <- 0.9
+sigma_z <- 0.5
+n       <- 1000
+
+y <- arima.sim(n = n, model = list(ar = c(phi1)), sd = sigma_z)
+```
+
+```{r}
+ts.plot(y, ylab = "X_t", xlab = "Time", main = sprintf("Simulated AR(1) series (n = %d, phi1 = %.1f, sigma_z = %.1f)", n, phi1, sigma_z))
+```
+
+```{r}
+acf(y, main = "Sample ACF: AR(1) simulation (n = 1000)")
+```
+
+```{r}
+Q1.AR1.acf <- ARMAacf(ar = c(phi1), ma = c(0), lag.max = 100)
+
+acf(y, main = "Sample vs Theoretical ACF (AR(1), n = 1000)")
+y_lag <- 0:100
+lines(y_lag, Q1.AR1.acf, col = "red", lwd = 2)
+legend("topright", legend = c("Sample", "Theoretical"), lty = c(NA, 1), pch = c(1, NA), col = c("black", "red"), bty = "n")
+
+```
+
+```{r}
+set.seed(14102)
+theta1  <- 0.6
+sigma_z <- 0.7
+n       <- 1500
+
+x_ma <- arima.sim(n = n, model = list(ma = c(theta1)), sd = sigma_z)
+
+```
+
+```{r}
+ts.plot(x_ma, ylab = "X_t", xlab = "Time", main = sprintf("Simulated MA(1) series (n = %d, theta1 = %.1f, sigma_z = %.1f)", n, theta1, sigma_z))
+```
+
+```{r}
+Q2.MA1.acf <- ARMAacf(ar = c(0), ma = c(theta1), lag.max = 100)
+
+acf(x_ma, main = "Sample vs Theoretical ACF (MA(1))")
+x_lag <- 0:100
+lines(x_lag, Q2.MA1.acf, col = "red", lwd = 2)
+legend("topright", legend = c("Sample", "Theoretical"), lty = c(NA, 1), pch = c(1, NA), col = c("black", "red"), bty = "n")
+
+```
+
+```{r}
+set.seed(82301)
+n       <- 1000
+x       <- numeric(n)
+phi1    <- -0.6
+sigma_z <- 0.5
+
+z <- rnorm(n, mean = 0, sd = sigma_z)
+x[1] <- z[1]
+for (t in 2:n) {
+  x[t] <- phi1 * x[t - 1] + z[t]
+}
+x <- ts(x, start = 1, end = n)
+
+```
+
+```{r}
+ts.plot(x, ylab = "X_t", xlab = "Time", main = "Manual AR(1) simulation (phi1 = -0.6, sigma_z = 0.5)")
+
+```
+
+```{r}
+acf(x, main = "Sample vs Theoretical ACF (AR(1), manual sim)")
+Q3.AR1.acf <- ARMAacf(ar = c(phi1), ma = c(0), lag.max = 100)
+x_lag <- 0:100
+lines(x_lag, Q3.AR1.acf, col = "red", lwd = 2)
+legend("topright", legend = c("Sample", "Theoretical"), lty = c(NA, 1), pch = c(1, NA), col = c("black", "red"), bty = "n")
+
+```
+
+```{r}
+set.seed(9345)
+n       <- 2000
+theta1  <- 0.8
+sigma_z <- sqrt(0.64)
+
+x <- numeric(n)
+z <- rnorm(n, mean = 0, sd = sigma_z)
+
+x[1] <- z[1]
+for (t in 2:n) {
+  x[t] <- theta1 * z[t - 1] + z[t]
+}
+x <- ts(x, start = 1, end = n)
+
+```
+
+```{r}
+ts.plot(x, ylab = "X_t", xlab = "Time", main = "Manual MA(1) simulation (theta1 = 0.8, sigma_z^2 = 0.64)")
+```
+
+```{r}
+acf(x, main = "Sample vs Theoretical ACF (MA(1), manual sim)")
+Q4.MA1.acf <- ARMAacf(ar = c(0), ma = c(theta1), lag.max = 100)
+x_lag <- 0:100
+lines(x_lag, Q4.MA1.acf, col = "red", lwd = 2)
+legend("topright", legend = c("Sample", "Theoretical"), lty = c(NA, 1), pch = c(1, NA), col = c("black", "red"), bty = "n")
+
+```
+
+```{r}
+# Read the CSV (ensure it's in your working directory)
+eng_rain <- read.csv("eng_rain.csv", header = TRUE)
+
+# Declare as a time-series object starting in 1862 and ending in 2021
+annual_rain <- ts(eng_rain$annual_rainfall_mm, start = 1862, end = 2021)
+
+```
+
+```{r}
+ts.plot(
+  annual_rain,
+  ylab = "Annual rainfall (mm)",
+  xlab = "Year",
+  main = "England annual rainfall (1862–2021)"
+)
+```
+
+```{r}
+acf(annual_rain, main = "Sample ACF — England annual rainfall")
+```

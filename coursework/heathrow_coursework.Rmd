@@ -1,0 +1,145 @@
+---
+title: "Heathrow cargo"
+author: "Shubhu Shahade"
+date: "2025-04-26"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(forecast)
+library(tseries)
+
+# Read dataset and display first few rows 
+heathrow_cargo <- read.csv("heathrow_cargo.csv")
+head(heathrow_cargo)
+```
+
+```{r}
+#Create time series from dataset 
+cargo_ts <- ts(heathrow_cargo$cargo_tonnes,start=c(2005,1),frequency=12)
+
+# Plot time series object 
+plot(cargo_ts, main="Figure 1: Heathrow Cargo Tonnage (2005-2024)", 
+     ylab="Cargo volume in Tonnes", xlab="Year")
+```
+
+```{r}
+# Plot ACF and PACF for the original data
+acf(cargo_ts, main="Figure 2: ACF plot for Heathrow Cargo volume")
+pacf(cargo_ts, main="Figure 3: PACF plot for Heathrow Cargo volume")
+```
+
+```{r}
+# First difference for stationarity 
+cargo_ts_diff <- diff(cargo_ts)
+
+# Plot of first-differenced time series
+plot(cargo_ts_diff, main="Figure 4: Time Plot of First-Differenced time series", 
+     ylab="Differenced Cargo volume", xlab="Year")
+
+# ACF and PACF for the differenced series
+acf(cargo_ts_diff, main="Figure 5: ACF plot of first-differenced cargo")
+pacf(cargo_ts_diff, main="Figure 6: PACF plot of first-differenced cargo")
+```
+
+```{r} 
+# Model 1: ARIMA(0,1,1) Moving average (MA) model
+model1 <- Arima(cargo_ts, order = c(0,1,1), seasonal = list(order = c(0,0,0), period=12))
+summary(model1)
+AIC(model1)
+
+# Model 2: ARIMA(1,1,0) Autoregressive (AR) model
+model2 <- Arima(cargo_ts, order = c(1,1,0), seasonal = list(order = c(0,0,0), period=12))
+summary(model2)
+AIC(model2)
+
+# Model 3: ARIMA(1,1,1) Combined AR and MA model
+model3 <- Arima(cargo_ts, order = c(1,1,1), seasonal = list(order = c(0,0,0), period=12))
+summary(model3)
+AIC(model3)
+
+# Model 4: ARIMA(0,1,1)(2,0,0)[12] Seasonal ARIMA model with seasonal AR(2)
+model4 <- Arima(cargo_ts, order = c(0,1,1), seasonal = list(order = c(2,0,0), period=12))
+summary(model4)
+AIC(model4)
+```
+
+```{r}
+# Plot residuals over time to check for any patterns 
+plot(residuals(model4), 
+     main = "Figure 7: Residuals of ARIMA(0,1,1)(2,0,0)[12] Model", 
+     ylab = "Residuals", xlab = "Year")
+
+# ACF residuals plot
+acf(residuals(model4), 
+    main = "Figure 8: ACF of Residuals")
+
+# Ljung-Box test (20 lags) for randomness
+Box.test(residuals(model4), lag = 20, type = "Ljung-Box")
+
+```
+
+
+
+
+
+
+```{r}
+# Read dataset and display first few rows 
+scot_car_data <- read.csv("scot_car_data.csv")
+head(scot_car_data)
+
+#Create a time series 
+car_ts <- ts(scot_car_data$no_new_reg, start = c(2001,1), frequency = 4)
+
+#Plot the time series
+plot(car_ts, 
+     main = "Figure 1: Quarterly New Car Registrations (2001-Q1 to 2024-Q2)", 
+     ylab = "Number of Registrations (Thousands)", 
+     xlab = "Year")
+```
+
+```{r}
+#Plot the ACF and PACF
+acf(car_ts, main = "Figure 2: ACF of Car Registrations Time Series")
+pacf(car_ts, main = "Figure 3: PACF of Car Registrations Time Series")
+```
+
+```{r}
+#First differencing to get stationarity 
+diff_car_ts <- diff(car_ts)
+
+#Plot the differenced series
+plot(diff_car_ts, 
+     main = "Figure 4: First Differenced Car Registrations Time Series", 
+     ylab = "Differenced Registrations", 
+     xlab = "Year")
+
+#Plot ACF and PACF of differenced data
+acf(diff_car_ts, main = "Figure 5: ACF of First Differenced Series")
+pacf(diff_car_ts, main = "Figure 6: PACF of First Differenced Series")
+```
+
+```{r}
+#Manually fit model based on ACF and PACF plots
+manual_model <- Arima(car_ts, order=c(1,1,0), seasonal=list(order=c(0,1,1), period=4))
+summary(manual_model)
+```
+
+```{r}
+#Model validation. Check residuals of fitted model
+checkresiduals(manual_model)
+```
+
+```{r}
+# Forecast for next 4 quarters 
+future_forecast <- forecast(manual_model, h=4, level=95)
+
+# Simple plot of forecast along with intervals 
+autoplot(future_forecast)
+print(future_forecast)
+```
